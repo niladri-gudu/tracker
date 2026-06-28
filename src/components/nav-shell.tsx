@@ -1,0 +1,152 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { LayoutDashboard, Wallet, History, Tag, LogOut, Plus } from "lucide-react";
+import { authClient } from "@/lib/auth-client";
+import { cn } from "@/lib/utils";
+
+interface NavShellProps {
+  children: React.ReactNode;
+  session: {
+    user: {
+      name: string;
+      email: string;
+    };
+  };
+}
+
+export default function NavShell({ children, session }: NavShellProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await authClient.signOut();
+      router.push("/login");
+      router.refresh();
+    } catch (error) {
+      console.error("Sign out failed:", error);
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
+  const navItems = [
+    { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Accounts", href: "/accounts", icon: Wallet },
+    { name: "Ledger", href: "/transactions", icon: History },
+    { name: "Categories", href: "/categories", icon: Tag },
+  ];
+
+  // Helper to determine active tab title on mobile header
+  const activeTitle = navItems.find((item) => item.href === pathname)?.name || "Tracker";
+
+  return (
+    <div className="min-h-screen flex flex-col bg-background">
+      {/* MOBILE HEADER (Top Bar) - Hidden on Desktop */}
+      <header className="md:hidden fixed top-0 left-0 right-0 h-14 bg-card border-b border-border flex items-center justify-between px-4 z-40">
+        <span className="font-bold text-base tracking-tight text-foreground">{activeTitle}</span>
+        <button
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="size-11 flex items-center justify-center rounded text-muted-foreground active:bg-zinc-800/40 active:scale-95 transition-all"
+          title="Sign Out"
+          aria-label="Sign Out"
+        >
+          <LogOut className="size-5" />
+        </button>
+      </header>
+
+      {/* DESKTOP SIDEBAR - Hidden on Mobile */}
+      <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-64 bg-card border-r border-border flex-col justify-between py-6 px-4 z-30">
+        <div className="flex flex-col gap-8">
+          {/* Logo / Header */}
+          <div className="px-3 flex items-center gap-2">
+            <span className="size-3 bg-[#10b981] rounded-sm" />
+            <span className="font-bold text-lg tracking-tight text-foreground">Money Tracker</span>
+          </div>
+
+          {/* Navigation Links */}
+          <nav className="flex flex-col gap-1.5" aria-label="Main Navigation">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-3 px-3 h-11 rounded text-sm font-medium transition-all",
+                    isActive
+                      ? "bg-secondary text-foreground border-l-2 border-[#10b981] font-semibold"
+                      : "text-muted-foreground hover:text-foreground hover:bg-zinc-800/20"
+                  )}
+                >
+                  <Icon className={cn("size-4", isActive ? "text-[#10b981]" : "text-muted-foreground")} />
+                  {item.name}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* User profile & Logout */}
+        <div className="border-t border-border pt-4 px-2 flex flex-col gap-4">
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold truncate text-foreground">{session.user.name || "User"}</span>
+            <span className="text-xs text-muted-foreground truncate">{session.user.email}</span>
+          </div>
+          <button
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="flex w-full items-center gap-3 px-3 h-11 rounded text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-zinc-800/30 active:scale-[0.98] transition-all border border-transparent hover:border-border"
+          >
+            <LogOut className="size-4" />
+            {loggingOut ? "Signing out..." : "Sign Out"}
+          </button>
+        </div>
+      </aside>
+
+      {/* MAIN CONTENT AREA */}
+      {/* Placed md:pl-64 on desktop, and vertical paddings pt-14 pb-16 on mobile to avoid bars */}
+      <main className="flex-1 flex flex-col min-h-screen pt-14 pb-16 md:pt-0 md:pb-0 md:pl-64">
+        {children}
+      </main>
+
+      {/* MOBILE BOTTOM NAVIGATION BAR - Hidden on Desktop */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-card border-t border-border flex items-center justify-around px-2 z-40 pb-safe" aria-label="Mobile Navigation">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex flex-col items-center justify-center size-12 rounded transition-all active:scale-95",
+                isActive ? "text-[#10b981]" : "text-muted-foreground"
+              )}
+            >
+              <Icon className="size-5" />
+              <span className="text-[10px] mt-0.5 font-medium">{item.name}</span>
+            </Link>
+          );
+        })}
+
+        {/* Quick entry plus button (Dummy placeholder action) */}
+        <button
+          className="size-11 bg-[#10b981] hover:bg-[#10b981]/95 text-[#09090b] flex items-center justify-center rounded-full shadow transition-all active:scale-90"
+          aria-label="Add Transaction"
+          onClick={() => alert("Quick Entry modal coming soon!")}
+        >
+          <Plus className="size-5 stroke-[2.5]" />
+        </button>
+      </nav>
+    </div>
+  );
+}

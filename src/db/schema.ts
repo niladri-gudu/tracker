@@ -65,7 +65,7 @@ export const accounts = pgTable("accounts", {
   name: text("name").notNull(),
   type: text("type").notNull(), // "cash" | "bank" | "credit" | "investment"
   balance: numeric("balance", { precision: 12, scale: 2 }).default("0.00").notNull(),
-  currency: text("currency").default("USD").notNull(),
+  currency: text("currency").default("INR").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => {
