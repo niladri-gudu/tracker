@@ -6,6 +6,7 @@ import { createAccountAction } from "@/actions/accounts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -20,21 +21,12 @@ export default function AccountDialog() {
   const [type, setType] = useState<"cash" | "bank" | "investment">("cash");
   const [balance, setBalance] = useState("0.00");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
+  const queryClient = useQueryClient();
 
-    try {
-      const res = await createAccountAction({
-        name,
-        type,
-        balance,
-        currency: "INR",
-      });
-
+  const mutation = useMutation({
+    mutationFn: createAccountAction,
+    onSuccess: (res) => {
       if (!res.success) {
         setError(res.error || "Failed to create account.");
       } else {
@@ -43,27 +35,42 @@ export default function AccountDialog() {
         setType("cash");
         setBalance("0.00");
         setOpen(false);
+        queryClient.invalidateQueries({ queryKey: ["accounts"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
       }
-    } catch (err: any) {
+    },
+    onError: (err: any) => {
       setError(err?.message || "An unexpected error occurred.");
-    } finally {
-      setLoading(false);
-    }
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    mutation.mutate({
+      name,
+      type,
+      balance,
+      currency: "INR",
+    });
   };
+
+  const loading = mutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button className="h-11 px-4 bg-[#10b981] hover:bg-[#10b981]/90 text-[#09090b] font-medium flex items-center gap-2 rounded-sm transition-all active:scale-[0.98]">
+          <Button className="h-11 px-4 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold flex items-center gap-2 rounded-lg transition-all active:scale-[0.98]">
             <Plus className="size-4 stroke-[2.5]" />
             New Account
           </Button>
         }
       />
-      <DialogContent className="max-w-sm border border-border bg-[#09090b] p-6 text-foreground">
+      <DialogContent className="max-w-sm border border-zinc-800 bg-zinc-950 p-6 text-zinc-50">
         <DialogHeader>
-          <DialogTitle className="text-lg font-bold tracking-tight text-foreground">
+          <DialogTitle className="text-lg font-bold tracking-tight text-zinc-50">
             Create Manual Account
           </DialogTitle>
         </DialogHeader>
@@ -87,7 +94,7 @@ export default function AccountDialog() {
               onChange={(e) => setName(e.target.value)}
               required
               disabled={loading}
-              className="h-11 bg-[#18181b] border-border text-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0 placeholder:text-muted-foreground/30"
+              className="h-11 bg-zinc-900/50 border-zinc-800 text-zinc-50 rounded-lg placeholder:text-zinc-500"
             />
           </div>
 
@@ -95,13 +102,12 @@ export default function AccountDialog() {
             <Label htmlFor="account-type" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Account Type
             </Label>
-            {/* Native HTML Select used for responsive mobile native picker compatibility */}
             <select
               id="account-type"
               value={type}
               onChange={(e) => setType(e.target.value as any)}
               disabled={loading}
-              className="h-11 px-3 bg-[#18181b] border border-border text-foreground rounded-sm text-sm focus:outline-none focus:ring-1 focus:ring-ring select-none cursor-pointer"
+              className="h-11 px-3 bg-zinc-900/50 border border-zinc-800 text-zinc-50 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-zinc-800 select-none cursor-pointer"
             >
               <option value="cash">Cash (Physical Wallet)</option>
               <option value="bank">Bank (Checking/Savings)</option>
@@ -116,17 +122,16 @@ export default function AccountDialog() {
             <Input
               id="initial-balance"
               type="number"
+              inputMode="decimal"
               step="0.01"
               placeholder="0.00"
               value={balance}
               onChange={(e) => setBalance(e.target.value)}
               required
               disabled={loading}
-              className="h-11 bg-[#18181b] border-border text-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0 placeholder:text-muted-foreground/30"
+              className="h-11 bg-zinc-900/50 border-zinc-800 text-zinc-50 rounded-lg placeholder:text-zinc-500"
             />
           </div>
-
-
 
           <div className="flex gap-3 justify-end mt-2">
             <Button
@@ -134,14 +139,14 @@ export default function AccountDialog() {
               variant="outline"
               disabled={loading}
               onClick={() => setOpen(false)}
-              className="h-11 px-4 border-border text-muted-foreground hover:text-foreground hover:bg-zinc-800/30 transition-all rounded-sm"
+              className="h-11 px-4 border-zinc-800 text-zinc-400 hover:text-zinc-50 hover:bg-zinc-800/30 transition-all rounded-lg duration-200 active:scale-95"
             >
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={loading}
-              className="h-11 px-4 bg-primary text-primary-foreground hover:bg-primary/95 transition-all rounded-sm active:scale-[0.98]"
+              className="h-11 px-4 bg-zinc-50 text-zinc-950 hover:bg-zinc-200 transition-all rounded-lg duration-200 active:scale-95"
             >
               {loading ? "Creating..." : "Create Account"}
             </Button>

@@ -1,43 +1,48 @@
 "use client";
 
-import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { deleteCategoryAction } from "@/actions/categories";
 import { Button } from "@/components/ui/button";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 interface DeleteCategoryButtonProps {
   categoryId: string;
 }
 
 export function DeleteCategoryButton({ categoryId }: DeleteCategoryButtonProps) {
-  const [deleting, setDeleting] = useState(false);
+  const queryClient = useQueryClient();
 
-  const handleDelete = async () => {
+  const mutation = useMutation({
+    mutationFn: deleteCategoryAction,
+    onSuccess: (res) => {
+      if (res.success) {
+        queryClient.invalidateQueries({ queryKey: ["categories"] });
+        queryClient.invalidateQueries({ queryKey: ["transactions"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      } else {
+        alert(res.error || "Failed to delete category.");
+      }
+    },
+    onError: (err: any) => {
+      alert(err?.message || "An unexpected error occurred.");
+    },
+  });
+
+  const handleDelete = () => {
     const confirmDelete = window.confirm(
       "Are you sure you want to delete this category? Associated transactions will have their category field set to null."
     );
     if (!confirmDelete) return;
-
-    setDeleting(true);
-    try {
-      const res = await deleteCategoryAction(categoryId);
-      if (!res.success) {
-        alert(res.error || "Failed to delete category.");
-      }
-    } catch (err: any) {
-      alert(err?.message || "An unexpected error occurred.");
-    } finally {
-      setDeleting(false);
-    }
+    mutation.mutate(categoryId);
   };
 
   return (
     <Button
       type="button"
       variant="outline"
-      disabled={deleting}
+      disabled={mutation.isPending}
       onClick={handleDelete}
-      className="size-11 flex items-center justify-center border-border hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 rounded-sm active:scale-95 transition-all text-muted-foreground"
+      className="size-11 flex items-center justify-center border-zinc-800 hover:bg-destructive/10 hover:text-red-500 hover:border-red-500/30 rounded-lg active:scale-95 transition-all duration-200 text-zinc-400"
       aria-label="Delete Category"
       title="Delete Category"
     >

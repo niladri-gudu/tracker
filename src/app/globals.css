@@ -68,7 +68,7 @@
   --border: oklch(0.269 0 0); /* zinc-800 */
   --input: oklch(0.269 0 0);
   --ring: oklch(0.985 0 0);
-  --radius: 0.25rem; /* Sleek, terminal-inspired sharp edges */
+  --radius: 0.5rem; /* Soft, warm modern rounding */
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);

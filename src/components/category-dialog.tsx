@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -64,21 +65,12 @@ export default function CategoryDialog() {
   const [selectedIcon, setSelectedIcon] = useState<keyof typeof CATEGORY_ICONS>("Tag");
   const [selectedColor, setSelectedColor] = useState(PALETTE[0]);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
+  const queryClient = useQueryClient();
 
-    try {
-      const res = await createCategoryAction({
-        name,
-        type,
-        icon: selectedIcon,
-        color: selectedColor,
-      });
-
+  const mutation = useMutation({
+    mutationFn: createCategoryAction,
+    onSuccess: (res) => {
       if (!res.success) {
         setError(res.error || "Failed to create category.");
       } else {
@@ -87,27 +79,41 @@ export default function CategoryDialog() {
         setSelectedIcon("Tag");
         setSelectedColor(PALETTE[0]);
         setOpen(false);
+        queryClient.invalidateQueries({ queryKey: ["categories"] });
       }
-    } catch (err: any) {
+    },
+    onError: (err: any) => {
       setError(err?.message || "An unexpected error occurred.");
-    } finally {
-      setLoading(false);
-    }
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    mutation.mutate({
+      name,
+      type,
+      icon: selectedIcon,
+      color: selectedColor,
+    });
   };
+
+  const loading = mutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button className="h-11 px-4 bg-[#10b981] hover:bg-[#10b981]/90 text-[#09090b] font-medium flex items-center gap-2 rounded-sm transition-all active:scale-[0.98]">
+          <Button className="h-11 px-4 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold flex items-center gap-2 rounded-lg transition-all active:scale-[0.98]">
             <Plus className="size-4 stroke-[2.5]" />
             New Category
           </Button>
         }
       />
-      <DialogContent className="max-w-sm border border-border bg-[#09090b] p-6 text-foreground">
+      <DialogContent className="max-w-sm border border-zinc-800 bg-zinc-950 p-6 text-zinc-50">
         <DialogHeader>
-          <DialogTitle className="text-lg font-bold tracking-tight text-foreground">
+          <DialogTitle className="text-lg font-bold tracking-tight text-zinc-50">
             Create Custom Category
           </DialogTitle>
         </DialogHeader>
@@ -131,7 +137,7 @@ export default function CategoryDialog() {
               onChange={(e) => setName(e.target.value)}
               required
               disabled={loading}
-              className="h-11 bg-[#18181b] border-border text-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0 placeholder:text-muted-foreground/30"
+              className="h-11 bg-zinc-900/50 border-zinc-800 text-zinc-50 rounded-lg placeholder:text-zinc-500"
             />
           </div>
 
@@ -144,7 +150,7 @@ export default function CategoryDialog() {
               value={type}
               onChange={(e) => setType(e.target.value as any)}
               disabled={loading}
-              className="h-11 px-3 bg-[#18181b] border border-border text-foreground rounded-sm text-sm focus:outline-none focus:ring-1 focus:ring-ring select-none cursor-pointer"
+              className="h-11 px-3 bg-zinc-900/50 border border-zinc-800 text-zinc-50 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-zinc-800 select-none cursor-pointer"
             >
               <option value="expense">Expense (Outflow)</option>
               <option value="income">Income (Inflow)</option>
@@ -156,7 +162,7 @@ export default function CategoryDialog() {
             <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Choose Icon
             </Label>
-            <div className="grid grid-cols-5 gap-2 p-2 bg-[#18181b] border border-border rounded-sm max-h-[140px] overflow-y-auto">
+            <div className="grid grid-cols-5 gap-2 p-2 bg-zinc-900/50 border border-zinc-800 rounded-lg max-h-[140px] overflow-y-auto">
               {Object.entries(CATEGORY_ICONS).map(([key, Icon]) => {
                 const isSelected = selectedIcon === key;
                 return (
@@ -165,8 +171,8 @@ export default function CategoryDialog() {
                     type="button"
                     onClick={() => setSelectedIcon(key as any)}
                     className={cn(
-                      "size-11 flex items-center justify-center rounded border border-transparent hover:bg-zinc-800 transition-all active:scale-95",
-                      isSelected ? "border-primary bg-zinc-800/80 text-[#10b981]" : "text-muted-foreground"
+                      "size-11 flex items-center justify-center rounded-md border border-transparent hover:bg-zinc-800/50 transition-all duration-200 active:scale-95",
+                      isSelected ? "border-emerald-500 bg-zinc-800/80 text-emerald-500" : "text-zinc-400"
                     )}
                     aria-label={`Select icon ${key}`}
                   >
@@ -208,14 +214,14 @@ export default function CategoryDialog() {
               variant="outline"
               disabled={loading}
               onClick={() => setOpen(false)}
-              className="h-11 px-4 border-border text-muted-foreground hover:text-foreground hover:bg-zinc-800/30 transition-all rounded-sm"
+              className="h-11 px-4 border-zinc-800 text-zinc-400 hover:text-zinc-50 hover:bg-zinc-800/30 transition-all rounded-lg duration-200 active:scale-95"
             >
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={loading}
-              className="h-11 px-4 bg-primary text-primary-foreground hover:bg-primary/95 transition-all rounded-sm active:scale-[0.98]"
+              className="h-11 px-4 bg-zinc-50 text-zinc-950 hover:bg-zinc-200 transition-all rounded-lg duration-200 active:scale-95"
             >
               {loading ? "Creating..." : "Create Category"}
             </Button>

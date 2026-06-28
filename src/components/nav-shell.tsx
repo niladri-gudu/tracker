@@ -54,7 +54,7 @@ export default function NavShell({ children, session }: NavShellProps) {
         <button
           onClick={handleLogout}
           disabled={loggingOut}
-          className="size-11 flex items-center justify-center rounded text-muted-foreground active:bg-zinc-800/40 active:scale-95 transition-all"
+          className="size-11 flex items-center justify-center rounded-lg text-muted-foreground active:bg-zinc-800 transition-colors duration-200 active:scale-95"
           title="Sign Out"
           aria-label="Sign Out"
         >
@@ -67,7 +67,7 @@ export default function NavShell({ children, session }: NavShellProps) {
         <div className="flex flex-col gap-8">
           {/* Logo / Header */}
           <div className="px-3 flex items-center gap-2">
-            <span className="size-3 bg-[#10b981] rounded-sm" />
+            <span className="size-3 bg-emerald-500 rounded-md" />
             <span className="font-bold text-lg tracking-tight text-foreground">Money Tracker</span>
           </div>
 
@@ -81,13 +81,13 @@ export default function NavShell({ children, session }: NavShellProps) {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "flex items-center gap-3 px-3 h-11 rounded text-sm font-medium transition-all",
+                    "flex items-center gap-3 px-3 h-11 rounded-lg text-sm font-medium transition-all duration-200 active:bg-zinc-800",
                     isActive
-                      ? "bg-secondary text-foreground border-l-2 border-[#10b981] font-semibold"
+                      ? "bg-zinc-900 text-foreground border-l-2 border-emerald-500 font-semibold"
                       : "text-muted-foreground hover:text-foreground hover:bg-zinc-800/20"
                   )}
                 >
-                  <Icon className={cn("size-4", isActive ? "text-[#10b981]" : "text-muted-foreground")} />
+                  <Icon className={cn("size-4", isActive ? "text-emerald-500" : "text-muted-foreground")} />
                   {item.name}
                 </Link>
               );
@@ -104,7 +104,7 @@ export default function NavShell({ children, session }: NavShellProps) {
           <button
             onClick={handleLogout}
             disabled={loggingOut}
-            className="flex w-full items-center gap-3 px-3 h-11 rounded text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-zinc-800/30 active:scale-[0.98] transition-all border border-transparent hover:border-border"
+            className="flex w-full items-center gap-3 px-3 h-11 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-zinc-800/30 active:bg-zinc-800/50 active:scale-[0.98] transition-all duration-200 border border-transparent hover:border-border"
           >
             <LogOut className="size-4" />
             {loggingOut ? "Signing out..." : "Sign Out"}
@@ -128,8 +128,8 @@ export default function NavShell({ children, session }: NavShellProps) {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-col items-center justify-center size-12 rounded transition-all active:scale-95",
-                isActive ? "text-[#10b981]" : "text-muted-foreground"
+                "flex flex-col items-center justify-center size-12 rounded-lg transition-all duration-200 active:bg-zinc-800 active:scale-95",
+                isActive ? "text-emerald-500" : "text-muted-foreground"
               )}
             >
               <Icon className="size-5" />
@@ -140,7 +140,7 @@ export default function NavShell({ children, session }: NavShellProps) {
 
         {/* Quick entry plus button (Dummy placeholder action) */}
         <button
-          className="size-11 bg-[#10b981] hover:bg-[#10b981]/95 text-[#09090b] flex items-center justify-center rounded-full shadow transition-all active:scale-90"
+          className="size-11 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 flex items-center justify-center rounded-full shadow transition-all duration-200 active:scale-90"
           aria-label="Add Transaction"
           onClick={() => alert("Quick Entry modal coming soon!")}
         >
