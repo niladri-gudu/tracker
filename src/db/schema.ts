@@ -1,8 +1,8 @@
 import { pgTable, text, timestamp, uuid, numeric, boolean, index, unique } from "drizzle-orm/pg-core";
 
-// 1. user table (adapted for Better Auth with UUIDs)
+// 1. user table (adapted for Better Auth with text primary key for nanoids)
 export const user = pgTable("user", {
-  id: uuid("id").defaultRandom().primaryKey(),
+  id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull(),
@@ -20,7 +20,7 @@ export const session = pgTable("session", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
-  userId: uuid("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
 }, (table) => {
   return {
     userIdIdx: index("session_user_id_idx").on(table.userId),
@@ -32,7 +32,7 @@ export const account = pgTable("account", {
   id: text("id").primaryKey(),
   accountId: text("account_id").notNull(),
   providerId: text("provider_id").notNull(),
-  userId: uuid("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
   accessToken: text("access_token"),
   refreshToken: text("refresh_token"),
   idToken: text("id_token"),
@@ -61,7 +61,7 @@ export const verification = pgTable("verification", {
 // 5. accounts table (Money Tracker asset accounts)
 export const accounts = pgTable("accounts", {
   id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id").references(() => user.id, { onDelete: "cascade" }).notNull(),
+  userId: text("user_id").references(() => user.id, { onDelete: "cascade" }).notNull(),
   name: text("name").notNull(),
   type: text("type").notNull(), // "cash" | "bank" | "credit" | "investment"
   balance: numeric("balance", { precision: 12, scale: 2 }).default("0.00").notNull(),
@@ -77,7 +77,7 @@ export const accounts = pgTable("accounts", {
 // 6. categories table
 export const categories = pgTable("categories", {
   id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id").references(() => user.id, { onDelete: "cascade" }).notNull(),
+  userId: text("user_id").references(() => user.id, { onDelete: "cascade" }).notNull(),
   name: text("name").notNull(),
   type: text("type").notNull(), // "income" | "expense"
   icon: text("icon").default("tag").notNull(), // Lucide icon identifier
@@ -92,7 +92,7 @@ export const categories = pgTable("categories", {
 // 7. transactions table
 export const transactions = pgTable("transactions", {
   id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id").references(() => user.id, { onDelete: "cascade" }).notNull(),
+  userId: text("user_id").references(() => user.id, { onDelete: "cascade" }).notNull(),
   accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }).notNull(),
   categoryId: uuid("category_id").references(() => categories.id, { onDelete: "set null" }),
   
@@ -120,7 +120,7 @@ export const transactions = pgTable("transactions", {
 // 8. budgets table
 export const budgets = pgTable("budgets", {
   id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id").references(() => user.id, { onDelete: "cascade" }).notNull(),
+  userId: text("user_id").references(() => user.id, { onDelete: "cascade" }).notNull(),
   categoryId: uuid("category_id").references(() => categories.id, { onDelete: "cascade" }).notNull(),
   limitAmount: numeric("limit_amount", { precision: 12, scale: 2 }).notNull(),
   startDate: timestamp("start_date").notNull(), // Beginning of the budget cycle month

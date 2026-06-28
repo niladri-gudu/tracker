@@ -2,7 +2,7 @@ CREATE TABLE "account" (
 	"id" text PRIMARY KEY NOT NULL,
 	"account_id" text NOT NULL,
 	"provider_id" text NOT NULL,
-	"user_id" uuid NOT NULL,
+	"user_id" text NOT NULL,
 	"access_token" text,
 	"refresh_token" text,
 	"id_token" text,
@@ -16,7 +16,7 @@ CREATE TABLE "account" (
 --> statement-breakpoint
 CREATE TABLE "accounts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"user_id" uuid NOT NULL,
+	"user_id" text NOT NULL,
 	"name" text NOT NULL,
 	"type" text NOT NULL,
 	"balance" numeric(12, 2) DEFAULT '0.00' NOT NULL,
@@ -27,7 +27,7 @@ CREATE TABLE "accounts" (
 --> statement-breakpoint
 CREATE TABLE "budgets" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"user_id" uuid NOT NULL,
+	"user_id" text NOT NULL,
 	"category_id" uuid NOT NULL,
 	"limit_amount" numeric(12, 2) NOT NULL,
 	"start_date" timestamp NOT NULL,
@@ -38,7 +38,7 @@ CREATE TABLE "budgets" (
 --> statement-breakpoint
 CREATE TABLE "categories" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"user_id" uuid NOT NULL,
+	"user_id" text NOT NULL,
 	"name" text NOT NULL,
 	"type" text NOT NULL,
 	"icon" text DEFAULT 'tag' NOT NULL,
@@ -54,13 +54,13 @@ CREATE TABLE "session" (
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	"ip_address" text,
 	"user_agent" text,
-	"user_id" uuid NOT NULL,
+	"user_id" text NOT NULL,
 	CONSTRAINT "session_token_unique" UNIQUE("token")
 );
 --> statement-breakpoint
 CREATE TABLE "transactions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"user_id" uuid NOT NULL,
+	"user_id" text NOT NULL,
 	"account_id" uuid NOT NULL,
 	"category_id" uuid,
 	"type" text NOT NULL,
@@ -74,7 +74,7 @@ CREATE TABLE "transactions" (
 );
 --> statement-breakpoint
 CREATE TABLE "user" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" text PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"email" text NOT NULL,
 	"email_verified" boolean NOT NULL,
