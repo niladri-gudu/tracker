@@ -1,12 +1,59 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getDashboardStatsAction } from "@/actions/dashboard";
+import { getSubscriptionsAction, triggerSubscriptionPaymentAction } from "@/actions/subscriptions";
 import { CATEGORY_ICONS } from "@/components/category-dialog";
 import { DeleteTransactionButton } from "@/components/delete-transaction-button";
-import { Wallet, ArrowUpRight, ArrowDownRight, PiggyBank, ArrowRight, ArrowLeftRight, Tag } from "lucide-react";
+import { Wallet, ArrowUpRight, ArrowDownRight, PiggyBank, ArrowRight, ArrowLeftRight, Tag, CalendarClock } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+
+function getDaysRemaining(dateStr: string | Date) {
+  const target = new Date(dateStr);
+  target.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const diffTime = target.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return "Due today";
+  if (diffDays === 1) return "Due tomorrow";
+  if (diffDays === -1) return "1 day overdue";
+  if (diffDays < -1) return `${Math.abs(diffDays)} days overdue`;
+  return `Due in ${diffDays} days`;
+}
+
+function PaySubButton({ subId }: { subId: string }) {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: triggerSubscriptionPaymentAction,
+    onSuccess: (res) => {
+      if (res.success) {
+        queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+        queryClient.invalidateQueries({ queryKey: ["transactions"] });
+        queryClient.invalidateQueries({ queryKey: ["accounts"] });
+        queryClient.invalidateQueries({ queryKey: ["budgets"] });
+      } else {
+        alert(res.error || "Failed to log recurring payment.");
+      }
+    },
+  });
+
+  return (
+    <Button
+      size="sm"
+      disabled={mutation.isPending}
+      onClick={() => mutation.mutate(subId)}
+      className="h-8 px-3 bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-800 text-zinc-950 disabled:text-zinc-500 font-bold text-[10px] uppercase tracking-wide rounded-md active:scale-95 duration-200 cursor-pointer shrink-0"
+    >
+      {mutation.isPending ? "Logging..." : "Log Pay"}
+    </Button>
+  );
+}
 
 export default function DashboardPage() {
   const { data: stats, isLoading, error } = useQuery({
@@ -17,6 +64,15 @@ export default function DashboardPage() {
         throw new Error(res.error);
       }
       return res.data;
+    },
+  });
+
+  const { data: subscriptionsList = [] } = useQuery({
+    queryKey: ["subscriptions"],
+    queryFn: async () => {
+      const res = await getSubscriptionsAction();
+      if (!res.success) throw new Error(res.error);
+      return res.data || [];
     },
   });
 
@@ -168,6 +224,108 @@ export default function DashboardPage() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Upcoming Recurring Bills */}
+      {subscriptionsList.filter((sub) => {
+        if (!sub.isActive) return false;
+        const target = new Date(sub.nextDueDate);
+        target.setHours(0, 0, 0, 0);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const diffTime = target.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays <= 7;
+      }).length > 0 && (
+        <div className="flex flex-col gap-4 mt-4">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+            <h2 className="text-sm font-bold text-zinc-400 tracking-widest uppercase select-none">
+              Upcoming Bills & Subs
+            </h2>
+            <Link
+              href="/subscriptions"
+              className="text-xs text-emerald-500 hover:underline font-semibold transition-all font-sans"
+            >
+              Manage Bills →
+            </Link>
+          </div>
+
+          <div className="border border-zinc-800 bg-zinc-900/50 rounded-xl overflow-hidden divide-y divide-zinc-850">
+            {subscriptionsList
+              .filter((sub) => {
+                if (!sub.isActive) return false;
+                const target = new Date(sub.nextDueDate);
+                target.setHours(0, 0, 0, 0);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const diffTime = target.getTime() - today.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                return diffDays <= 7;
+              })
+              .map((sub) => {
+                const Icon = CATEGORY_ICONS[sub.categoryIcon as keyof typeof CATEGORY_ICONS] || Tag;
+                const daysRemainingStr = getDaysRemaining(sub.nextDueDate);
+                const isOverdue = daysRemainingStr.includes("overdue");
+                const isDueToday = daysRemainingStr === "Due today";
+
+                return (
+                  <div key={sub.id} className="flex items-center justify-between p-4 hover:bg-zinc-800/10 transition-colors duration-200 select-none">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className="size-9 rounded-md flex items-center justify-center shrink-0"
+                        style={{
+                          backgroundColor: sub.categoryColor ? `${sub.categoryColor}15` : "#27272a20",
+                          color: sub.categoryColor || "#71717a",
+                        }}
+                      >
+                        <Icon className="size-4" />
+                      </div>
+
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-bold text-zinc-50 flex items-center gap-1.5">
+                          {sub.name}
+                          <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest bg-zinc-900 border border-zinc-800 px-1 py-0.5 rounded">
+                            {sub.frequency}
+                          </span>
+                        </span>
+                        <span className="text-[10px] text-zinc-500 font-semibold mt-0.5">
+                          Via {sub.accountName}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 shrink-0">
+                      <div className="flex flex-col text-right">
+                        <span
+                          className={cn(
+                            "text-xs font-black tracking-tight",
+                            sub.type === "expense" ? "text-red-500" : "text-emerald-500"
+                          )}
+                        >
+                          {sub.type === "expense" ? "-" : "+"}
+                          ₹{parseFloat(sub.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        </span>
+                        <span
+                          className={cn(
+                            "text-[9px] font-bold mt-0.5",
+                            isOverdue
+                              ? "text-red-400"
+                              : isDueToday
+                              ? "text-amber-400"
+                              : "text-zinc-400"
+                          )}
+                        >
+                          {daysRemainingStr}
+                        </span>
+                      </div>
+
+                      <PaySubButton subId={sub.id} />
+                    </div>
+                  </div>
+                );
+              })}
           </div>
         </div>
       )}

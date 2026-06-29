@@ -135,3 +135,28 @@ export const budgets = pgTable("budgets", {
     ),
   };
 });
+
+// 9. subscriptions table
+export const subscriptions = pgTable("subscriptions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").references(() => user.id, { onDelete: "cascade" }).notNull(),
+  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }).notNull(),
+  categoryId: uuid("category_id").references(() => categories.id, { onDelete: "set null" }),
+  
+  name: text("name").notNull(), // e.g. "Netflix", "Gym Membership", "Monthly Rent"
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  type: text("type").default("expense").notNull(), // "expense" | "income"
+  frequency: text("frequency").notNull(), // "daily" | "weekly" | "monthly" | "yearly"
+  startDate: timestamp("start_date").notNull(),
+  nextDueDate: timestamp("next_due_date").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => {
+  return {
+    userIdIdx: index("subscriptions_user_id_idx").on(table.userId),
+    accountIdIdx: index("subscriptions_account_id_idx").on(table.accountId),
+    categoryIdIdx: index("subscriptions_category_id_idx").on(table.categoryId),
+  };
+});
