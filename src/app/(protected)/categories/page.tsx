@@ -5,9 +5,12 @@ import { getCategoriesAction } from "@/actions/categories";
 import CategoryDialog, { CATEGORY_ICONS } from "@/components/category-dialog";
 import { DeleteCategoryButton } from "@/components/delete-category-button";
 import { Tag } from "lucide-react";
+import { getBudgetsAction } from "@/actions/budgets";
+import BudgetDialog from "@/components/budget-dialog";
+import { cn } from "@/lib/utils";
 
 export default function CategoriesPage() {
-  const { data: list, isLoading, error } = useQuery({
+  const categoriesQuery = useQuery({
     queryKey: ["categories"],
     queryFn: async () => {
       const res = await getCategoriesAction();
@@ -17,6 +20,21 @@ export default function CategoriesPage() {
       return res.data || [];
     },
   });
+
+  const budgetsQuery = useQuery({
+    queryKey: ["budgets"],
+    queryFn: async () => {
+      const res = await getBudgetsAction();
+      if (!res.success) {
+        throw new Error(res.error);
+      }
+      return res.data || [];
+    },
+  });
+
+  const isLoading = categoriesQuery.isLoading || budgetsQuery.isLoading;
+  const error = categoriesQuery.error || budgetsQuery.error;
+  const list = categoriesQuery.data || [];
 
   if (isLoading) {
     return (
@@ -31,10 +49,10 @@ export default function CategoriesPage() {
     );
   }
 
-  if (error || !list) {
+  if (error) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-center p-4">
-        <p className="text-sm text-destructive">Failed to load categories.</p>
+        <p className="text-sm text-destructive">Failed to load categories or budgets.</p>
         <p className="text-xs text-muted-foreground mt-1">{(error as any)?.message || "Unexpected error occurred."}</p>
       </div>
     );
@@ -44,19 +62,27 @@ export default function CategoriesPage() {
   const expenses = list.filter((c) => c.type === "expense");
   const incomes = list.filter((c) => c.type === "income");
 
+  const budgetsMap = new Map(budgetsQuery.data?.map((b) => [b.categoryId, b]) || []);
+
   const renderCategoryGrid = (items: typeof list) => (
     <div className="flex flex-col border border-zinc-800 bg-zinc-900/50 rounded-xl overflow-hidden divide-y divide-zinc-800 mt-4">
       {items.map((cat) => {
         // Resolve Icon component
         const IconComponent = CATEGORY_ICONS[cat.icon as keyof typeof CATEGORY_ICONS] || Tag;
         const colorHex = cat.color || "#71717a";
+        const existingBudget = budgetsMap.get(cat.id);
+
+        const spent = existingBudget ? existingBudget.spentAmount : 0;
+        const limit = existingBudget ? parseFloat(existingBudget.limitAmount) : 0;
+        const percent = limit > 0 ? Math.min((spent / limit) * 100, 100) : 0;
+        const isOver = spent > limit;
 
         return (
           <div
             key={cat.id}
-            className="flex items-center justify-between p-3 hover:bg-zinc-800/10 transition-colors duration-200"
+            className="flex items-center justify-between p-3 hover:bg-zinc-800/10 transition-colors duration-200 gap-4"
           >
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
               <div
                 className="size-10 rounded-md flex items-center justify-center shrink-0"
                 style={{
@@ -66,12 +92,47 @@ export default function CategoriesPage() {
               >
                 <IconComponent className="size-5" />
               </div>
-              <span className="text-sm font-semibold truncate text-zinc-50 pr-2">
-                {cat.name}
-              </span>
+              <div className="flex flex-col min-w-0 flex-1">
+                <span className="text-sm font-semibold truncate text-zinc-50">
+                  {cat.name}
+                </span>
+
+                {cat.type === "expense" && (
+                  <div className="mt-1.5 flex flex-col gap-1 w-full max-w-[200px] sm:max-w-xs pr-4">
+                    {existingBudget ? (
+                      <>
+                        <div className="flex justify-between items-center text-[10px]">
+                          <span className="text-zinc-400 font-mono">
+                            ₹{spent.toLocaleString("en-IN")} / ₹{limit.toLocaleString("en-IN")}
+                          </span>
+                          <span className={cn("font-bold font-mono", isOver ? "text-red-500" : "text-emerald-500")}>
+                            {Math.round((spent / limit) * 100)}%
+                          </span>
+                        </div>
+                        <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
+                          <div
+                            className={cn(
+                              "h-full rounded-full transition-all duration-300",
+                              isOver ? "bg-red-500" : "bg-emerald-500"
+                            )}
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <span className="text-[10px] text-zinc-500 italic select-none">No budget set</span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
-            <DeleteCategoryButton categoryId={cat.id} />
+            <div className="flex items-center gap-2">
+              {cat.type === "expense" && (
+                <BudgetDialog category={cat} existingBudget={existingBudget} />
+              )}
+              <DeleteCategoryButton categoryId={cat.id} />
+            </div>
           </div>
         );
       })}

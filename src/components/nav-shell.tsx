@@ -6,6 +6,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { LayoutDashboard, Wallet, History, Tag, LogOut, Plus } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { getAccountsAction } from "@/actions/accounts";
+import { getCategoriesAction } from "@/actions/categories";
+import TransactionDialog from "@/components/transaction-dialog";
 
 interface NavShellProps {
   children: React.ReactNode;
@@ -21,6 +25,25 @@ export default function NavShell({ children, session }: NavShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [quickEntryOpen, setQuickEntryOpen] = useState(false);
+
+  const accountsQuery = useQuery({
+    queryKey: ["accounts"],
+    queryFn: async () => {
+      const res = await getAccountsAction();
+      if (!res.success) throw new Error(res.error);
+      return res.data || [];
+    },
+  });
+
+  const categoriesQuery = useQuery({
+    queryKey: ["categories"],
+    queryFn: async () => {
+      const res = await getCategoriesAction();
+      if (!res.success) throw new Error(res.error);
+      return res.data || [];
+    },
+  });
 
   const handleLogout = async () => {
     if (loggingOut) return;
@@ -138,15 +161,32 @@ export default function NavShell({ children, session }: NavShellProps) {
           );
         })}
 
-        {/* Quick entry plus button (Dummy placeholder action) */}
+        {/* Quick entry plus button */}
         <button
           className="size-11 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 flex items-center justify-center rounded-full shadow transition-all duration-200 active:scale-90"
           aria-label="Add Transaction"
-          onClick={() => alert("Quick Entry modal coming soon!")}
+          onClick={() => {
+            if (!accountsQuery.data || accountsQuery.data.length === 0) {
+              alert("You must configure at least one account before logging a transaction. Redirecting to Accounts page...");
+              router.push("/accounts");
+            } else {
+              setQuickEntryOpen(true);
+            }
+          }}
         >
           <Plus className="size-5 stroke-[2.5]" />
         </button>
       </nav>
+
+      {/* Global Quick Entry Dialog */}
+      {accountsQuery.data && accountsQuery.data.length > 0 && (
+        <TransactionDialog
+          accountsList={accountsQuery.data}
+          categoriesList={categoriesQuery.data || []}
+          open={quickEntryOpen}
+          onOpenChange={setQuickEntryOpen}
+        />
+      )}
     </div>
   );
 }

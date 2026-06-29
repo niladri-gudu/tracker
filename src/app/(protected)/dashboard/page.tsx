@@ -100,6 +100,78 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Active Budgets Progress */}
+      {stats.budgetsDetails && stats.budgetsDetails.length > 0 && (
+        <div className="flex flex-col gap-4 mt-4">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+            <h2 className="text-sm font-bold text-zinc-400 tracking-widest uppercase select-none">
+              Budget Constraints
+            </h2>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {stats.budgetsDetails.map((b) => {
+              const percent = b.limitAmount > 0 ? Math.min((b.spentAmount / b.limitAmount) * 100, 100) : 0;
+              const isOver = b.spentAmount > b.limitAmount;
+              const IconComponent = CATEGORY_ICONS[b.categoryIcon as keyof typeof CATEGORY_ICONS] || Tag;
+              const colorHex = b.categoryColor || "#71717a";
+
+              return (
+                <div
+                  key={b.id}
+                  className="border border-zinc-800 bg-zinc-900/70 p-4 rounded-xl flex flex-col gap-3 transition-all hover:border-zinc-700/80 duration-200"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className="size-8 rounded-md flex items-center justify-center shrink-0"
+                        style={{
+                          backgroundColor: `${colorHex}15`,
+                          color: colorHex,
+                        }}
+                      >
+                        <IconComponent className="size-4" />
+                      </div>
+                      <span className="text-sm font-semibold truncate text-zinc-50">
+                        {b.categoryName}
+                      </span>
+                    </div>
+                    <span className="text-xs text-zinc-400 font-mono">
+                      ₹{b.spentAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / ₹{b.limitAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all duration-300",
+                          isOver ? "bg-red-500" : "bg-emerald-500"
+                        )}
+                        style={{ width: `${percent}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] mt-0.5">
+                      <span className={cn(isOver ? "text-red-500 font-bold" : "text-zinc-500")}>
+                        {isOver ? "Over budget limit" : `${Math.round(percent)}% spent`}
+                      </span>
+                      {b.limitAmount - b.spentAmount >= 0 ? (
+                        <span className="text-zinc-500 font-mono">
+                          ₹{(b.limitAmount - b.spentAmount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} left
+                        </span>
+                      ) : (
+                        <span className="text-red-500 font-mono font-bold">
+                          -₹{Math.abs(b.limitAmount - b.spentAmount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} over
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Recent Transactions Section */}
       <div className="flex flex-col gap-4 mt-4">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-2">

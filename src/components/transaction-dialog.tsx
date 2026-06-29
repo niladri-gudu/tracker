@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus } from "lucide-react";
 import { createTransactionAction } from "@/actions/transactions";
 import { Button } from "@/components/ui/button";
@@ -19,18 +19,40 @@ import {
 interface TransactionDialogProps {
   accountsList: Array<{ id: string; name: string; type: string }>;
   categoriesList: Array<{ id: string; name: string; type: string }>;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  trigger?: React.ReactElement;
 }
 
-export default function TransactionDialog({ accountsList, categoriesList }: TransactionDialogProps) {
-  const [open, setOpen] = useState(false);
+export default function TransactionDialog({
+  accountsList,
+  categoriesList,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  trigger,
+}: TransactionDialogProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen;
+
   const [type, setType] = useState<"expense" | "income" | "transfer">("expense");
   const [amount, setAmount] = useState("");
-  const [accountId, setAccountId] = useState(accountsList[0]?.id || "");
+  const [accountId, setAccountId] = useState(() => accountsList[0]?.id || "");
   const [categoryId, setCategoryId] = useState("");
-  const [toAccountId, setToAccountId] = useState(accountsList[1]?.id || "");
+  const [toAccountId, setToAccountId] = useState(() => accountsList[1]?.id || "");
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  // Sync state once lists become available
+  useEffect(() => {
+    if (!accountId && accountsList[0]?.id) {
+      setAccountId(accountsList[0].id);
+    }
+    if (!toAccountId && accountsList[1]?.id) {
+      setToAccountId(accountsList[1].id);
+    }
+  }, [accountsList, accountId, toAccountId]);
 
   const queryClient = useQueryClient();
 
@@ -77,14 +99,18 @@ export default function TransactionDialog({ accountsList, categoriesList }: Tran
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          <Button className="h-11 px-4 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold flex items-center gap-2 rounded-lg transition-all active:scale-[0.98]">
-            <Plus className="size-4 stroke-[2.5]" />
-            Add Transaction
-          </Button>
-        }
-      />
+      {trigger ? (
+        <DialogTrigger render={trigger} />
+      ) : (
+        <DialogTrigger
+          render={
+            <Button className="h-11 px-4 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold flex items-center gap-2 rounded-lg transition-all active:scale-[0.98]">
+              <Plus className="size-4 stroke-[2.5]" />
+              Add Transaction
+            </Button>
+          }
+        />
+      )}
       <DialogContent className="max-w-sm border border-zinc-800 bg-zinc-950 p-6 text-zinc-50">
         <DialogHeader>
           <DialogTitle className="text-lg font-bold tracking-tight text-zinc-50">

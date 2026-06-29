@@ -5,6 +5,7 @@ import { accounts, budgets, categories, transactions } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { eq, and, desc, gte, aliasedTable } from "drizzle-orm";
 import { headers } from "next/headers";
+import { getCategorySpentAmounts } from "./budgets";
 
 async function getSessionUser() {
   const session = await auth.api.getSession({
@@ -61,11 +62,53 @@ export async function getDashboardStatsAction() {
       }
     });
 
-    // 3. Fetch active budgets count
+    // 3. Fetch active budgets and details
     const budgetsList = await db
-      .select()
+      .select({
+        id: budgets.id,
+        categoryId: budgets.categoryId,
+        limitAmount: budgets.limitAmount,
+      })
       .from(budgets)
-      .where(eq(budgets.userId, user.id));
+      .where(
+        and(
+          eq(budgets.userId, user.id),
+          eq(budgets.startDate, startOfMonth)
+        )
+      );
+
+    const userCategories = await db
+      .select()
+      .from(categories)
+      .where(eq(categories.userId, user.id));
+    const categoriesMap = new Map(userCategories.map(c => [c.id, c]));
+
+    const spentMap = await getCategorySpentAmounts(user.id, startOfMonth);
+
+    const budgetsDetails = budgetsList
+      .map((b) => {
+        const cat = categoriesMap.get(b.categoryId);
+        if (!cat) return null;
+        const spent = spentMap[b.categoryId] || 0;
+        return {
+          id: b.id,
+          categoryId: b.categoryId,
+          categoryName: cat.name,
+          categoryIcon: cat.icon,
+          categoryColor: cat.color,
+          limitAmount: parseFloat(b.limitAmount),
+          spentAmount: spent,
+        };
+      })
+      .filter((b) => b !== null) as Array<{
+        id: string;
+        categoryId: string;
+        categoryName: string;
+        categoryIcon: string;
+        categoryColor: string;
+        limitAmount: number;
+        spentAmount: number;
+      }>;
 
     // 4. Fetch top 5 recent transactions
     const recent = await db
@@ -100,6 +143,7 @@ export async function getDashboardStatsAction() {
         monthlyExpense,
         activeBudgetsCount: budgetsList.length,
         recentTransactions: recent,
+        budgetsDetails,
       },
     };
   } catch (error: any) {
