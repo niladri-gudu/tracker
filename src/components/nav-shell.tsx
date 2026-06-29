@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Wallet, History, Tag, LogOut, Plus, PieChart, CalendarClock, MoreHorizontal } from "lucide-react";
+import { LayoutDashboard, Wallet, History, Tag, LogOut, Plus, PieChart, CalendarClock, MoreHorizontal, Target } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -70,6 +70,7 @@ export default function NavShell({ children, session }: NavShellProps) {
     { name: "Categories", href: "/categories", icon: Tag },
     { name: "Analytics", href: "/analytics", icon: PieChart },
     { name: "Bills & Subs", href: "/subscriptions", icon: CalendarClock },
+    { name: "Savings Goals", href: "/goals", icon: Target },
   ];
 
 
@@ -204,7 +205,7 @@ export default function NavShell({ children, session }: NavShellProps) {
           onClick={() => setMoreOpen(true)}
           className={cn(
             "flex flex-col items-center justify-center size-12 rounded-lg transition-all duration-200 active:bg-zinc-800 active:scale-95 cursor-pointer",
-            ["/analytics", "/subscriptions", "/categories"].includes(pathname)
+            ["/analytics", "/subscriptions", "/categories", "/goals"].includes(pathname)
               ? "text-emerald-500"
               : "text-muted-foreground"
           )}
@@ -267,6 +268,21 @@ export default function NavShell({ children, session }: NavShellProps) {
             >
               <Tag className="size-4.5" />
               Categories
+            </Link>
+
+            {/* Savings Goals */}
+            <Link
+              href="/goals"
+              onClick={() => setMoreOpen(false)}
+              className={cn(
+                "flex items-center gap-3 px-3 h-12 rounded-lg text-sm font-bold transition-all",
+                pathname === "/goals"
+                  ? "bg-zinc-800 text-emerald-400"
+                  : "text-zinc-300 hover:bg-zinc-800/30"
+              )}
+            >
+              <Target className="size-4.5" />
+              Savings Goals
             </Link>
 
             <div className="h-px bg-zinc-800 my-2" />

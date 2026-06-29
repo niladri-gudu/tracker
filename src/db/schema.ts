@@ -160,3 +160,19 @@ export const subscriptions = pgTable("subscriptions", {
     categoryIdIdx: index("subscriptions_category_id_idx").on(table.categoryId),
   };
 });
+
+// 10. savings_goals table
+export const savingsGoals = pgTable("savings_goals", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").references(() => user.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  targetAmount: numeric("target_amount", { precision: 12, scale: 2 }).notNull(),
+  currentAmount: numeric("current_amount", { precision: 12, scale: 2 }).default("0.00").notNull(),
+  targetDate: timestamp("target_date"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => {
+  return {
+    userIdIdx: index("savings_goals_user_id_idx").on(table.userId),
+  };
+});

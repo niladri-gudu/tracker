@@ -3,9 +3,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getDashboardStatsAction } from "@/actions/dashboard";
 import { getSubscriptionsAction, triggerSubscriptionPaymentAction } from "@/actions/subscriptions";
+import { getGoalsAction } from "@/actions/goals";
 import { CATEGORY_ICONS } from "@/components/category-dialog";
 import { DeleteTransactionButton } from "@/components/delete-transaction-button";
-import { Wallet, ArrowUpRight, ArrowDownRight, PiggyBank, ArrowRight, ArrowLeftRight, Tag, CalendarClock } from "lucide-react";
+import { Wallet, ArrowUpRight, ArrowDownRight, PiggyBank, ArrowRight, ArrowLeftRight, Tag, CalendarClock, Target } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -71,6 +72,15 @@ export default function DashboardPage() {
     queryKey: ["subscriptions"],
     queryFn: async () => {
       const res = await getSubscriptionsAction();
+      if (!res.success) throw new Error(res.error);
+      return res.data || [];
+    },
+  });
+
+  const { data: goalsList = [] } = useQuery({
+    queryKey: ["goals"],
+    queryFn: async () => {
+      const res = await getGoalsAction();
       if (!res.success) throw new Error(res.error);
       return res.data || [];
     },
@@ -217,6 +227,71 @@ export default function DashboardPage() {
                       ) : (
                         <span className="text-red-500 font-mono font-bold">
                           -₹{Math.abs(b.limitAmount - b.spentAmount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} over
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Savings Goals Milestone Widget */}
+      {goalsList && goalsList.length > 0 && (
+        <div className="flex flex-col gap-4 mt-4">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+            <h2 className="text-sm font-bold text-zinc-400 tracking-widest uppercase select-none">
+              Savings Milestones
+            </h2>
+            <Link
+              href="/goals"
+              className="text-xs text-emerald-500 hover:underline font-semibold transition-all font-sans"
+            >
+              View Goals →
+            </Link>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {goalsList.map((g) => {
+              const current = parseFloat(g.currentAmount);
+              const target = parseFloat(g.targetAmount);
+              const percentCorrect = target > 0 ? Math.min(Math.round((current / target) * 100), 100) : 0;
+              const isDone = percentCorrect >= 100;
+
+              return (
+                <div
+                  key={g.id}
+                  className="border border-zinc-800 bg-zinc-900/70 p-4 rounded-xl flex flex-col gap-3 transition-all hover:border-zinc-700/80 duration-200"
+                >
+                  <div className="flex items-center justify-between select-none">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="size-8 rounded-md flex items-center justify-center bg-emerald-500/10 text-emerald-500 shrink-0">
+                        <Target className="size-4" />
+                      </div>
+                      <span className="text-sm font-semibold truncate text-zinc-50">
+                        {g.name}
+                      </span>
+                    </div>
+                    <span className="text-xs text-zinc-400 font-mono">
+                      ₹{current.toLocaleString("en-IN")} / ₹{target.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                        style={{ width: `${percentCorrect}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] mt-0.5 select-none">
+                      <span className="text-zinc-500">{percentCorrect}% saved</span>
+                      {isDone ? (
+                        <span className="text-emerald-500 font-bold uppercase tracking-wider">Completed!</span>
+                      ) : (
+                        <span className="text-zinc-500 font-mono">
+                          ₹{(target - current).toLocaleString("en-IN")} left
                         </span>
                       )}
                     </div>
