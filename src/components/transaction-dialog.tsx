@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Plus } from "lucide-react";
-import { createTransactionAction } from "@/actions/transactions";
+import { executeCreateTransaction } from "@/lib/offline-mutations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,19 +57,20 @@ export default function TransactionDialog({
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: createTransactionAction,
-    onSuccess: (res) => {
+    mutationFn: (raw: any) => executeCreateTransaction(queryClient, raw, accountsList, categoriesList),
+    onSuccess: (res: any) => {
       if (!res.success) {
         setError(res.error || "Failed to log transaction.");
       } else {
         setAmount("");
         setCategoryId("");
         setDescription("");
-        setDate(new Date().toISOString().split("T")[0]);
         setOpen(false);
-        queryClient.invalidateQueries({ queryKey: ["transactions"] });
-        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
-        queryClient.invalidateQueries({ queryKey: ["accounts"] });
+        if (!res.offline) {
+          queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+          queryClient.invalidateQueries({ queryKey: ["transactions"] });
+          queryClient.invalidateQueries({ queryKey: ["accounts"] });
+        }
       }
     },
     onError: (err: any) => {

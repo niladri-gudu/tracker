@@ -1,7 +1,7 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
-import { deleteTransactionAction } from "@/actions/transactions";
+import { executeDeleteTransaction } from "@/lib/offline-mutations";
 import { Button } from "@/components/ui/button";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -13,12 +13,14 @@ export function DeleteTransactionButton({ transactionId }: DeleteTransactionButt
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: deleteTransactionAction,
-    onSuccess: (res) => {
+    mutationFn: (id: string) => executeDeleteTransaction(queryClient, id),
+    onSuccess: (res: any) => {
       if (res.success) {
-        queryClient.invalidateQueries({ queryKey: ["transactions"] });
-        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
-        queryClient.invalidateQueries({ queryKey: ["accounts"] });
+        if (!res.offline) {
+          queryClient.invalidateQueries({ queryKey: ["transactions"] });
+          queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+          queryClient.invalidateQueries({ queryKey: ["accounts"] });
+        }
       } else {
         alert(res.error || "Failed to delete transaction.");
       }

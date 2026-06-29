@@ -1,7 +1,7 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
-import { deleteCategoryAction } from "@/actions/categories";
+import { executeDeleteCategory } from "@/lib/offline-mutations";
 import { Button } from "@/components/ui/button";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -13,12 +13,14 @@ export function DeleteCategoryButton({ categoryId }: DeleteCategoryButtonProps) 
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: deleteCategoryAction,
-    onSuccess: (res) => {
+    mutationFn: (id: string) => executeDeleteCategory(queryClient, id),
+    onSuccess: (res: any) => {
       if (res.success) {
-        queryClient.invalidateQueries({ queryKey: ["categories"] });
-        queryClient.invalidateQueries({ queryKey: ["transactions"] });
-        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+        if (!res.offline) {
+          queryClient.invalidateQueries({ queryKey: ["categories"] });
+          queryClient.invalidateQueries({ queryKey: ["transactions"] });
+          queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+        }
       } else {
         alert(res.error || "Failed to delete category.");
       }

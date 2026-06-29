@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { PiggyBank } from "lucide-react";
-import { createOrUpdateBudgetAction, deleteBudgetAction } from "@/actions/budgets";
+import { executeCreateOrUpdateBudget, executeDeleteBudget } from "@/lib/offline-mutations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,15 +37,17 @@ export default function BudgetDialog({ category, existingBudget }: BudgetDialogP
   const queryClient = useQueryClient();
 
   const setMutation = useMutation({
-    mutationFn: createOrUpdateBudgetAction,
-    onSuccess: (res) => {
+    mutationFn: (raw: any) => executeCreateOrUpdateBudget(queryClient, raw, [category]),
+    onSuccess: (res: any) => {
       if (!res.success) {
         setError(res.error || "Failed to save budget.");
       } else {
         setOpen(false);
-        queryClient.invalidateQueries({ queryKey: ["budgets"] });
-        queryClient.invalidateQueries({ queryKey: ["categories"] });
-        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+        if (!res.offline) {
+          queryClient.invalidateQueries({ queryKey: ["budgets"] });
+          queryClient.invalidateQueries({ queryKey: ["categories"] });
+          queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+        }
       }
     },
     onError: (err: any) => {
@@ -54,16 +56,18 @@ export default function BudgetDialog({ category, existingBudget }: BudgetDialogP
   });
 
   const deleteMutation = useMutation({
-    mutationFn: deleteBudgetAction,
-    onSuccess: (res) => {
+    mutationFn: (id: string) => executeDeleteBudget(queryClient, id),
+    onSuccess: (res: any) => {
       if (!res.success) {
         setError(res.error || "Failed to delete budget.");
       } else {
         setLimitAmount("");
         setOpen(false);
-        queryClient.invalidateQueries({ queryKey: ["budgets"] });
-        queryClient.invalidateQueries({ queryKey: ["categories"] });
-        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+        if (!res.offline) {
+          queryClient.invalidateQueries({ queryKey: ["budgets"] });
+          queryClient.invalidateQueries({ queryKey: ["categories"] });
+          queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+        }
       }
     },
     onError: (err: any) => {

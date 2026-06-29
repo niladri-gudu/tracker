@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { createAccountAction } from "@/actions/accounts";
+import { executeCreateAccount } from "@/lib/offline-mutations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,8 +25,8 @@ export default function AccountDialog() {
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: createAccountAction,
-    onSuccess: (res) => {
+    mutationFn: (raw: any) => executeCreateAccount(queryClient, raw),
+    onSuccess: (res: any) => {
       if (!res.success) {
         setError(res.error || "Failed to create account.");
       } else {
@@ -35,8 +35,10 @@ export default function AccountDialog() {
         setType("cash");
         setBalance("0.00");
         setOpen(false);
-        queryClient.invalidateQueries({ queryKey: ["accounts"] });
-        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+        if (!res.offline) {
+          queryClient.invalidateQueries({ queryKey: ["accounts"] });
+          queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+        }
       }
     },
     onError: (err: any) => {

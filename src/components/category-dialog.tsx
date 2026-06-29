@@ -17,7 +17,7 @@ import {
   Gift,
   Tag,
 } from "lucide-react";
-import { createCategoryAction } from "@/actions/categories";
+import { executeCreateCategory } from "@/lib/offline-mutations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,8 +69,8 @@ export default function CategoryDialog() {
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: createCategoryAction,
-    onSuccess: (res) => {
+    mutationFn: (raw: any) => executeCreateCategory(queryClient, raw),
+    onSuccess: (res: any) => {
       if (!res.success) {
         setError(res.error || "Failed to create category.");
       } else {
@@ -79,7 +79,9 @@ export default function CategoryDialog() {
         setSelectedIcon("Tag");
         setSelectedColor(PALETTE[0]);
         setOpen(false);
-        queryClient.invalidateQueries({ queryKey: ["categories"] });
+        if (!res.offline) {
+          queryClient.invalidateQueries({ queryKey: ["categories"] });
+        }
       }
     },
     onError: (err: any) => {

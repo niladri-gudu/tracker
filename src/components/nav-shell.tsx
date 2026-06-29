@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getAccountsAction } from "@/actions/accounts";
 import { getCategoriesAction } from "@/actions/categories";
 import TransactionDialog from "@/components/transaction-dialog";
+import { useNetworkStatus } from "@/hooks/use-network-status";
 
 interface NavShellProps {
   children: React.ReactNode;
@@ -26,6 +27,7 @@ export default function NavShell({ children, session }: NavShellProps) {
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
   const [quickEntryOpen, setQuickEntryOpen] = useState(false);
+  const isOnline = useNetworkStatus();
 
   const accountsQuery = useQuery({
     queryKey: ["accounts"],
@@ -66,24 +68,16 @@ export default function NavShell({ children, session }: NavShellProps) {
     { name: "Categories", href: "/categories", icon: Tag },
   ];
 
-  // Helper to determine active tab title on mobile header
-  const activeTitle = navItems.find((item) => item.href === pathname)?.name || "Tracker";
+
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      {/* MOBILE HEADER (Top Bar) - Hidden on Desktop */}
-      <header className="md:hidden fixed top-0 left-0 right-0 h-14 bg-card border-b border-border flex items-center justify-between px-4 z-40">
-        <span className="font-bold text-base tracking-tight text-foreground">{activeTitle}</span>
-        <button
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className="size-11 flex items-center justify-center rounded-lg text-muted-foreground active:bg-zinc-800 transition-colors duration-200 active:scale-95"
-          title="Sign Out"
-          aria-label="Sign Out"
-        >
-          <LogOut className="size-5" />
-        </button>
-      </header>
+      {/* Floating Offline indicator for mobile viewports */}
+      {!isOnline && (
+        <div className="md:hidden fixed top-3 left-1/2 -translate-x-1/2 z-50 bg-amber-500/90 text-zinc-950 text-[10px] font-bold px-3 py-1 rounded-full shadow-lg backdrop-blur-sm animate-pulse select-none">
+          Offline Mode
+        </div>
+      )}
 
       {/* DESKTOP SIDEBAR - Hidden on Mobile */}
       <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-64 bg-card border-r border-border flex-col justify-between py-6 px-4 z-30">
@@ -120,6 +114,12 @@ export default function NavShell({ children, session }: NavShellProps) {
 
         {/* User profile & Logout */}
         <div className="border-t border-border pt-4 px-2 flex flex-col gap-4">
+          {!isOnline && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-lg text-xs font-semibold select-none animate-pulse">
+              <span className="size-1.5 bg-amber-500 rounded-full" />
+              Offline Mode
+            </div>
+          )}
           <div className="flex flex-col">
             <span className="text-sm font-semibold truncate text-foreground">{session.user.name || "User"}</span>
             <span className="text-xs text-muted-foreground truncate">{session.user.email}</span>
@@ -136,8 +136,8 @@ export default function NavShell({ children, session }: NavShellProps) {
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      {/* Placed md:pl-64 on desktop, and vertical paddings pt-14 pb-16 on mobile to avoid bars */}
-      <main className="flex-1 flex flex-col min-h-screen pt-14 pb-16 md:pt-0 md:pb-0 md:pl-64">
+      {/* Placed md:pl-64 on desktop, and vertical paddings pt-4 pb-16 on mobile to avoid bars */}
+      <main className="flex-1 flex flex-col min-h-screen pt-4 pb-16 md:pt-0 md:pb-0 md:pl-64">
         {children}
       </main>
 
