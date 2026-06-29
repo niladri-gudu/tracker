@@ -3,14 +3,14 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAccountsAction } from "@/actions/accounts";
 import { getCategoriesAction } from "@/actions/categories";
-import { getTransactionsAction } from "@/actions/transactions";
+import { getTransactionsAction, importTransactionsAction } from "@/actions/transactions";
 import TransactionDialog from "@/components/transaction-dialog";
 import { DeleteTransactionButton } from "@/components/delete-transaction-button";
 import { CATEGORY_ICONS } from "@/components/category-dialog";
-import { ArrowRight, ArrowLeftRight, Tag, Search, SlidersHorizontal } from "lucide-react";
+import { ArrowRight, ArrowLeftRight, Tag, Search, SlidersHorizontal, Download, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,8 +25,9 @@ import {
 export default function TransactionsPage() {
   const searchParams = useSearchParams();
   const initialAccount = searchParams.get("account") || null;
+  const queryClient = useQueryClient();
 
-  // 1. Filter and Search States
+  // 1. Filter, Search, and Import States
   const [searchQuery, setSearchQuery] = useState("");
   const [filterAccountId, setFilterAccountId] = useState<string | null>(initialAccount);
   const [filterCategoryId, setFilterCategoryId] = useState<string | null>(null);
@@ -35,12 +36,16 @@ export default function TransactionsPage() {
   const [endDate, setEndDate] = useState("");
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
 
+  const [importDrawerOpen, setImportDrawerOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+
   // Sync state if query parameters change (e.g. user navigates from Account Card link)
   useEffect(() => {
     setFilterAccountId(searchParams.get("account") || null);
   }, [searchParams]);
 
-  // 2. React Query parallel fetches (Load ALL transactions for client-side search/filters)
+  // 2. React Query parallel fetches
   const accountsQuery = useQuery({
     queryKey: ["accounts"],
     queryFn: async () => {
@@ -65,6 +70,28 @@ export default function TransactionsPage() {
       const res = await getTransactionsAction();
       if (!res.success) throw new Error(res.error);
       return res.data || [];
+    },
+  });
+
+  // Import Mutation
+  const importMutation = useMutation({
+    mutationFn: importTransactionsAction,
+    onSuccess: (res) => {
+      if (res.success) {
+        setImportDrawerOpen(false);
+        setSelectedFile(null);
+        // Invalidate all related caches to trigger a UI refresh
+        queryClient.invalidateQueries({ queryKey: ["transactions"] });
+        queryClient.invalidateQueries({ queryKey: ["accounts"] });
+        queryClient.invalidateQueries({ queryKey: ["categories"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+        queryClient.invalidateQueries({ queryKey: ["budgets"] });
+      } else {
+        setImportError(res.error || "Failed to import transactions.");
+      }
+    },
+    onError: (err: any) => {
+      setImportError(err?.message || "An unexpected error occurred.");
     },
   });
 
@@ -194,6 +221,138 @@ export default function TransactionsPage() {
     });
   };
 
+  // 4. Export logic
+  const escapeCSV = (str: string) => {
+    if (!str) return "";
+    const escaped = str.replace(/"/g, '""');
+    return escaped.includes(",") || escaped.includes("\n") || escaped.includes('"')
+      ? `"${escaped}"`
+      : escaped;
+  };
+
+  const handleExportCSV = () => {
+    const headers = ["Date", "Type", "Amount", "Category", "Account", "ToAccount", "Description"];
+    const rows = filteredTransactions.map((tx) => [
+      new Date(tx.date).toISOString().split("T")[0],
+      tx.type,
+      tx.amount,
+      tx.categoryName || "",
+      tx.accountName || "",
+      tx.toAccountName || "",
+      tx.description || "",
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((row) => row.map((val) => escapeCSV(val)).join(",")),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `ledger_export_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // 5. Import parsing & triggers
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
+      setImportError(null);
+    }
+  };
+
+  const parseCSV = (text: string) => {
+    const lines = text.split(/\r?\n/);
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
+    
+    const dateIdx = headers.findIndex((h) => h.toLowerCase() === "date");
+    const typeIdx = headers.findIndex((h) => h.toLowerCase() === "type");
+    const amountIdx = headers.findIndex((h) => h.toLowerCase() === "amount");
+    const categoryIdx = headers.findIndex((h) => h.toLowerCase() === "category");
+    const accountIdx = headers.findIndex((h) => h.toLowerCase() === "account");
+    const toAccountIdx = headers.findIndex((h) => h.toLowerCase() === "toaccount");
+    const descIdx = headers.findIndex((h) => h.toLowerCase() === "description");
+
+    if (dateIdx === -1 || typeIdx === -1 || amountIdx === -1 || accountIdx === -1) {
+      throw new Error("Missing required headers in CSV. Required fields: Date, Type, Amount, Account.");
+    }
+
+    const list: Array<any> = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      // Handle quoted commas properly
+      const values: string[] = [];
+      let currentVal = "";
+      let inQuotes = false;
+      for (let c = 0; c < line.length; c++) {
+        const char = line[c];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === "," && !inQuotes) {
+          values.push(currentVal.trim().replace(/^"|"$/g, "").replace(/""/g, '"'));
+          currentVal = "";
+        } else {
+          currentVal += char;
+        }
+      }
+      values.push(currentVal.trim().replace(/^"|"$/g, "").replace(/""/g, '"'));
+
+      const date = values[dateIdx];
+      const type = values[typeIdx];
+      const amount = values[amountIdx];
+      const accountName = values[accountIdx];
+
+      if (!date || !type || !amount || !accountName) continue;
+
+      list.push({
+        date,
+        type: type.toLowerCase(),
+        amount,
+        accountName,
+        categoryName: categoryIdx !== -1 ? values[categoryIdx] : undefined,
+        toAccountName: toAccountIdx !== -1 ? values[toAccountIdx] : undefined,
+        description: descIdx !== -1 ? values[descIdx] : undefined,
+      });
+    }
+
+    return list;
+  };
+
+  const handleUpload = () => {
+    if (!selectedFile) return;
+    setImportError(null);
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const text = e.target?.result;
+      if (typeof text !== "string") {
+        setImportError("Failed to read file.");
+        return;
+      }
+
+      try {
+        const parsed = parseCSV(text);
+        if (parsed.length === 0) {
+          setImportError("No transactions found in CSV file.");
+          return;
+        }
+        importMutation.mutate(parsed);
+      } catch (err: any) {
+        setImportError(err.message || "Failed to parse CSV file.");
+      }
+    };
+    reader.readAsText(selectedFile);
+  };
+
   return (
     <div className="flex flex-col gap-6 p-4 md:p-8 max-w-5xl mx-auto w-full">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-5">
@@ -201,11 +360,37 @@ export default function TransactionsPage() {
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Ledger</h1>
           <p className="text-sm text-muted-foreground">Monitor and track your cash flows chronologically.</p>
         </div>
-        {accountsList.length > 0 && (
-          <div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Export Action */}
+          <Button
+            variant="outline"
+            onClick={handleExportCSV}
+            className="h-10 px-3.5 border-zinc-800 text-zinc-400 hover:text-zinc-50 hover:bg-zinc-800/30 rounded-lg active:scale-95 duration-200 flex items-center gap-2 text-xs font-bold uppercase tracking-wider cursor-pointer"
+            title="Export Ledger to CSV"
+          >
+            <Download className="size-4" />
+            <span>Export</span>
+          </Button>
+
+          {/* Import Action */}
+          <Button
+            variant="outline"
+            onClick={() => {
+              setSelectedFile(null);
+              setImportError(null);
+              setImportDrawerOpen(true);
+            }}
+            className="h-10 px-3.5 border-zinc-800 text-zinc-400 hover:text-zinc-50 hover:bg-zinc-800/30 rounded-lg active:scale-95 duration-200 flex items-center gap-2 text-xs font-bold uppercase tracking-wider cursor-pointer"
+            title="Import Ledger from CSV"
+          >
+            <Upload className="size-4" />
+            <span>Import</span>
+          </Button>
+
+          {accountsList.length > 0 && (
             <TransactionDialog accountsList={accountsList} categoriesList={categoriesList} />
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {accountsList.length === 0 ? (
@@ -483,6 +668,64 @@ export default function TransactionsPage() {
                 className="h-11 px-4 bg-zinc-50 text-zinc-950 hover:bg-zinc-200 transition-all rounded-lg duration-200 active:scale-95 text-xs font-bold uppercase tracking-wider"
               >
                 Apply
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* IMPORT DIALOG */}
+      <Dialog open={importDrawerOpen} onOpenChange={setImportDrawerOpen}>
+        <DialogContent className="max-w-sm border border-zinc-800 bg-zinc-950 p-6 text-zinc-50">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold tracking-tight text-zinc-50 flex items-center gap-2 select-none">
+              <Upload className="size-5 text-emerald-500" />
+              Import Transactions
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-5 mt-4">
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Upload a CSV file containing your transaction logs. The CSV headers must include: <strong className="text-zinc-200">Date, Type, Amount, Account</strong>. Missing accounts and categories will be created automatically.
+            </p>
+
+            {importError && (
+              <div className="border border-destructive bg-destructive/10 p-3 text-xs text-destructive rounded-lg">
+                {importError}
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="csv-file" className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                Choose CSV File
+              </Label>
+              <Input
+                id="csv-file"
+                type="file"
+                accept=".csv"
+                onChange={handleFileChange}
+                disabled={importMutation.isPending}
+                className="h-12 bg-zinc-900/50 border-zinc-800 text-zinc-50 text-xs flex items-center pt-2.5 cursor-pointer file:bg-zinc-800 file:text-zinc-50 file:border-0 file:rounded-md file:text-[10px] file:font-bold file:uppercase file:px-2 file:py-1 file:mr-3"
+              />
+            </div>
+
+            <div className="flex justify-between items-center gap-3 mt-3 border-t border-zinc-800 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={importMutation.isPending}
+                onClick={() => setImportDrawerOpen(false)}
+                className="h-11 px-4 border-zinc-800 text-zinc-400 hover:text-zinc-50 hover:bg-zinc-800/30 transition-all rounded-lg duration-200 active:scale-95 text-xs font-bold uppercase tracking-wider"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={importMutation.isPending || !selectedFile}
+                onClick={handleUpload}
+                className="h-11 px-4 bg-zinc-50 text-zinc-950 hover:bg-zinc-200 transition-all rounded-lg duration-200 active:scale-95 text-xs font-bold uppercase tracking-wider"
+              >
+                {importMutation.isPending ? "Importing..." : "Upload & Import"}
               </Button>
             </div>
           </div>

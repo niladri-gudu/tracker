@@ -211,3 +211,176 @@ export async function deleteTransactionAction(transactionId: string) {
     return { success: false, error: error.message || "Failed to delete transaction" };
   }
 }
+
+export async function importTransactionsAction(
+  rawList: Array<{
+    date: string;
+    type: string;
+    amount: string;
+    categoryName?: string;
+    accountName: string;
+    toAccountName?: string;
+    description?: string;
+  }>
+) {
+  try {
+    const user = await getSessionUser();
+
+    await db.transaction(async (tx) => {
+      // 1. Load existing accounts and categories
+      const existingAccs = await tx
+        .select()
+        .from(accounts)
+        .where(eq(accounts.userId, user.id));
+
+      const existingCats = await tx
+        .select()
+        .from(categories)
+        .where(eq(categories.userId, user.id));
+
+      // Quick lookups
+      const accountMap = new Map<string, typeof accounts.$inferSelect>();
+      existingAccs.forEach((acc) => accountMap.set(acc.name.toLowerCase(), acc));
+
+      const categoryMap = new Map<string, typeof categories.$inferSelect>();
+      existingCats.forEach((cat) => categoryMap.set(`${cat.name.toLowerCase()}:${cat.type}`, cat));
+
+      const resolvedAccounts = new Map<string, string>(); // name.toLowerCase() -> id
+      const resolvedCategories = new Map<string, string>(); // name.toLowerCase():type -> id
+
+      // Helper to find or create an account
+      const getOrCreateAccount = async (name: string) => {
+        const key = name.toLowerCase();
+        if (resolvedAccounts.has(key)) return resolvedAccounts.get(key)!;
+        if (accountMap.has(key)) {
+          const acc = accountMap.get(key)!;
+          resolvedAccounts.set(key, acc.id);
+          return acc.id;
+        }
+
+        // Create missing account
+        const [newAcc] = await tx
+          .insert(accounts)
+          .values({
+            userId: user.id,
+            name: name,
+            type: "cash", // default
+            balance: "0.00",
+            currency: "INR",
+          })
+          .returning();
+        
+        accountMap.set(key, newAcc);
+        resolvedAccounts.set(key, newAcc.id);
+        return newAcc.id;
+      };
+
+      // Helper to find or create a category
+      const getOrCreateCategory = async (name: string, type: string) => {
+        const key = `${name.toLowerCase()}:${type}`;
+        if (resolvedCategories.has(key)) return resolvedCategories.get(key)!;
+        if (categoryMap.has(key)) {
+          const cat = categoryMap.get(key)!;
+          resolvedCategories.set(key, cat.id);
+          return cat.id;
+        }
+
+        // Create missing category
+        const [newCat] = await tx
+          .insert(categories)
+          .values({
+            userId: user.id,
+            name: name,
+            type: type,
+            icon: "tag",
+            color: "#10b981", // default emerald green
+          })
+          .returning();
+
+        categoryMap.set(key, newCat);
+        resolvedCategories.set(key, newCat.id);
+        return newCat.id;
+      };
+
+      // Process each transaction row
+      for (const raw of rawList) {
+        const amt = parseFloat(raw.amount);
+        if (isNaN(amt) || amt <= 0) continue; // skip invalid records
+
+        const type = raw.type.toLowerCase();
+        if (type !== "income" && type !== "expense" && type !== "transfer") continue;
+
+        const date = new Date(raw.date);
+        if (isNaN(date.getTime())) continue; // skip invalid dates
+
+        // Resolve account
+        const accountId = await getOrCreateAccount(raw.accountName);
+
+        // Resolve category if applicable
+        let categoryId: string | null = null;
+        if (type !== "transfer" && raw.categoryName) {
+          categoryId = await getOrCreateCategory(raw.categoryName, type);
+        }
+
+        // Resolve destination account for transfer
+        let toAccountId: string | null = null;
+        if (type === "transfer" && raw.toAccountName) {
+          toAccountId = await getOrCreateAccount(raw.toAccountName);
+        }
+
+        // Calculate and apply balance updates
+        if (type === "transfer") {
+          if (!toAccountId) continue; // skip transfers without destination
+          
+          // Deduct from source and add to destination
+          const [sourceAcc] = await tx.select().from(accounts).where(eq(accounts.id, accountId));
+          const [destAcc] = await tx.select().from(accounts).where(eq(accounts.id, toAccountId));
+          if (!sourceAcc || !destAcc) continue;
+          
+          await tx
+            .update(accounts)
+            .set({ balance: (parseFloat(sourceAcc.balance) - amt).toFixed(2) })
+            .where(eq(accounts.id, accountId));
+
+          await tx
+            .update(accounts)
+            .set({ balance: (parseFloat(destAcc.balance) + amt).toFixed(2) })
+            .where(eq(accounts.id, toAccountId));
+        } else if (type === "expense") {
+          const [sourceAcc] = await tx.select().from(accounts).where(eq(accounts.id, accountId));
+          if (!sourceAcc) continue;
+          await tx
+            .update(accounts)
+            .set({ balance: (parseFloat(sourceAcc.balance) - amt).toFixed(2) })
+            .where(eq(accounts.id, accountId));
+        } else if (type === "income") {
+          const [sourceAcc] = await tx.select().from(accounts).where(eq(accounts.id, accountId));
+          if (!sourceAcc) continue;
+          await tx
+            .update(accounts)
+            .set({ balance: (parseFloat(sourceAcc.balance) + amt).toFixed(2) })
+            .where(eq(accounts.id, accountId));
+        }
+
+        // Log transaction record
+        await tx.insert(transactions).values({
+          userId: user.id,
+          accountId: accountId,
+          categoryId: categoryId,
+          type: type,
+          amount: raw.amount,
+          date: date,
+          description: raw.description || null,
+          toAccountId: toAccountId,
+        });
+      }
+    });
+
+    revalidatePath("/transactions");
+    revalidatePath("/accounts");
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to import transactions" };
+  }
+}
