@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Wallet, History, Tag, LogOut, Plus } from "lucide-react";
+import { LayoutDashboard, Wallet, History, Tag, LogOut, Plus, PieChart } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -66,6 +66,7 @@ export default function NavShell({ children, session }: NavShellProps) {
     { name: "Accounts", href: "/accounts", icon: Wallet },
     { name: "Ledger", href: "/transactions", icon: History },
     { name: "Categories", href: "/categories", icon: Tag },
+    { name: "Analytics", href: "/analytics", icon: PieChart },
   ];
 
 

@@ -212,6 +212,59 @@ export async function deleteTransactionAction(transactionId: string) {
   }
 }
 
+function parseCSVDate(dateStr: string): Date | null {
+  if (!dateStr) return null;
+  
+  const clean = dateStr.trim();
+  let year: number | null = null;
+  let month: number | null = null;
+  let day: number | null = null;
+
+  // Pattern 1: DD/MM/YYYY or DD-MM-YYYY
+  const dmyMatch = clean.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (dmyMatch) {
+    day = parseInt(dmyMatch[1], 10);
+    month = parseInt(dmyMatch[2], 10) - 1; // 0-indexed
+    year = parseInt(dmyMatch[3], 10);
+  }
+  
+  // Pattern 2: YYYY/MM/DD or YYYY-MM-DD
+  const ymdMatch = clean.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
+  if (ymdMatch) {
+    year = parseInt(ymdMatch[1], 10);
+    month = parseInt(ymdMatch[2], 10) - 1;
+    day = parseInt(ymdMatch[3], 10);
+  }
+  
+  // Pattern 3: DD-MMM-YYYY (e.g. 29-Jun-2026 or 29-June-2026)
+  const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const dmmmMatch = clean.match(/^(\d{1,2})[\/-]([A-Za-z]{3,9})[\/-](\d{4})$/);
+  if (dmmmMatch) {
+    day = parseInt(dmmmMatch[1], 10);
+    const monthStr = dmmmMatch[2].toLowerCase().substring(0, 3);
+    month = months.indexOf(monthStr);
+    year = parseInt(dmmmMatch[3], 10);
+  }
+
+  // Fallback direct parsing
+  if (year === null || month === null || day === null) {
+    const d = new Date(clean);
+    if (!isNaN(d.getTime())) {
+      year = d.getUTCFullYear();
+      month = d.getUTCMonth();
+      day = d.getUTCDate();
+    }
+  }
+
+  if (year !== null && month !== null && day !== null) {
+    // Construct Date at 12:00:00 UTC (Noon) to prevent timezone shifts on client
+    const d = new Date(Date.UTC(year, month, day, 12, 0, 0, 0));
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  return null;
+}
+
 export async function importTransactionsAction(
   rawList: Array<{
     date: string;
@@ -225,9 +278,11 @@ export async function importTransactionsAction(
 ) {
   try {
     const user = await getSessionUser();
+    let importedCount = 0;
+    let skippedCount = 0;
 
     await db.transaction(async (tx) => {
-      // 1. Load existing accounts and categories
+      // 1. Load existing user items for resolution and duplicate check
       const existingAccs = await tx
         .select()
         .from(accounts)
@@ -238,12 +293,38 @@ export async function importTransactionsAction(
         .from(categories)
         .where(eq(categories.userId, user.id));
 
-      // Quick lookups
+      const existingTxs = await tx
+        .select()
+        .from(transactions)
+        .where(eq(transactions.userId, user.id));
+
+      // Hash-map existing items
       const accountMap = new Map<string, typeof accounts.$inferSelect>();
       existingAccs.forEach((acc) => accountMap.set(acc.name.toLowerCase(), acc));
 
       const categoryMap = new Map<string, typeof categories.$inferSelect>();
       existingCats.forEach((cat) => categoryMap.set(`${cat.name.toLowerCase()}:${cat.type}`, cat));
+
+      // Compiles unique transaction hashes to verify duplicates in memory
+      const makeTxKey = (t: {
+        date: Date;
+        type: string;
+        amount: string;
+        accountId: string;
+        toAccountId?: string | null;
+        description?: string | null;
+      }) => {
+        const dateStr = t.date.toISOString().split("T")[0]; // YYYY-MM-DD
+        const desc = t.description ? t.description.trim().toLowerCase() : "";
+        const toAcc = t.toAccountId || "";
+        const amt = parseFloat(t.amount).toFixed(2);
+        return `${dateStr}:${t.type}:${amt}:${t.accountId}:${toAcc}:${desc}`;
+      };
+
+      const txSet = new Set<string>();
+      existingTxs.forEach((t) => {
+        txSet.add(makeTxKey(t));
+      });
 
       const resolvedAccounts = new Map<string, string>(); // name.toLowerCase() -> id
       const resolvedCategories = new Map<string, string>(); // name.toLowerCase():type -> id
@@ -305,13 +386,22 @@ export async function importTransactionsAction(
       // Process each transaction row
       for (const raw of rawList) {
         const amt = parseFloat(raw.amount);
-        if (isNaN(amt) || amt <= 0) continue; // skip invalid records
+        if (isNaN(amt) || amt <= 0) {
+          skippedCount++;
+          continue;
+        }
 
         const type = raw.type.toLowerCase();
-        if (type !== "income" && type !== "expense" && type !== "transfer") continue;
+        if (type !== "income" && type !== "expense" && type !== "transfer") {
+          skippedCount++;
+          continue;
+        }
 
-        const date = new Date(raw.date);
-        if (isNaN(date.getTime())) continue; // skip invalid dates
+        const date = parseCSVDate(raw.date);
+        if (!date || isNaN(date.getTime())) {
+          skippedCount++;
+          continue;
+        }
 
         // Resolve account
         const accountId = await getOrCreateAccount(raw.accountName);
@@ -328,14 +418,35 @@ export async function importTransactionsAction(
           toAccountId = await getOrCreateAccount(raw.toAccountName);
         }
 
+        // Check for duplicates
+        const uniqueKey = makeTxKey({
+          date,
+          type,
+          amount: raw.amount,
+          accountId,
+          toAccountId,
+          description: raw.description,
+        });
+
+        if (txSet.has(uniqueKey)) {
+          skippedCount++;
+          continue;
+        }
+
         // Calculate and apply balance updates
         if (type === "transfer") {
-          if (!toAccountId) continue; // skip transfers without destination
+          if (!toAccountId) {
+            skippedCount++;
+            continue;
+          }
           
           // Deduct from source and add to destination
           const [sourceAcc] = await tx.select().from(accounts).where(eq(accounts.id, accountId));
           const [destAcc] = await tx.select().from(accounts).where(eq(accounts.id, toAccountId));
-          if (!sourceAcc || !destAcc) continue;
+          if (!sourceAcc || !destAcc) {
+            skippedCount++;
+            continue;
+          }
           
           await tx
             .update(accounts)
@@ -348,14 +459,20 @@ export async function importTransactionsAction(
             .where(eq(accounts.id, toAccountId));
         } else if (type === "expense") {
           const [sourceAcc] = await tx.select().from(accounts).where(eq(accounts.id, accountId));
-          if (!sourceAcc) continue;
+          if (!sourceAcc) {
+            skippedCount++;
+            continue;
+          }
           await tx
             .update(accounts)
             .set({ balance: (parseFloat(sourceAcc.balance) - amt).toFixed(2) })
             .where(eq(accounts.id, accountId));
         } else if (type === "income") {
           const [sourceAcc] = await tx.select().from(accounts).where(eq(accounts.id, accountId));
-          if (!sourceAcc) continue;
+          if (!sourceAcc) {
+            skippedCount++;
+            continue;
+          }
           await tx
             .update(accounts)
             .set({ balance: (parseFloat(sourceAcc.balance) + amt).toFixed(2) })
@@ -373,13 +490,17 @@ export async function importTransactionsAction(
           description: raw.description || null,
           toAccountId: toAccountId,
         });
+
+        // Add the newly created transaction key to txSet to prevent duplicates in the same CSV file!
+        txSet.add(uniqueKey);
+        importedCount++;
       }
     });
 
     revalidatePath("/transactions");
     revalidatePath("/accounts");
     revalidatePath("/dashboard");
-    return { success: true };
+    return { success: true, count: importedCount, skipped: skippedCount };
   } catch (error: any) {
     return { success: false, error: error.message || "Failed to import transactions" };
   }

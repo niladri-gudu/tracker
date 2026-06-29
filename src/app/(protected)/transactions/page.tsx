@@ -76,10 +76,14 @@ export default function TransactionsPage() {
   // Import Mutation
   const importMutation = useMutation({
     mutationFn: importTransactionsAction,
-    onSuccess: (res) => {
+    onSuccess: (res: any) => {
       if (res.success) {
         setImportDrawerOpen(false);
         setSelectedFile(null);
+        const count = res.count ?? 0;
+        const skipped = res.skipped ?? 0;
+        alert(`Import completed! Successfully imported ${count} transactions.${skipped > 0 ? ` ${skipped} invalid rows were skipped.` : ""}`);
+        
         // Invalidate all related caches to trigger a UI refresh
         queryClient.invalidateQueries({ queryKey: ["transactions"] });
         queryClient.invalidateQueries({ queryKey: ["accounts"] });
